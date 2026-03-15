@@ -1,0 +1,19 @@
+# Secrets - NEVER commit these
+.env
+token.json
+credentials.json
+
+# Local overrides
+docker-compose.override.yml
+
+# Generated output
+html/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# IDE / tools
+.claude/
+.DS_Store

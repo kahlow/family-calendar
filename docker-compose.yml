@@ -1,0 +1,19 @@
+services:
+  calendar-sync:
+    build: .
+    env_file: .env
+    environment:
+      - TOKEN_PATH=/app/token.json
+      - HTML_DIR=/app/html
+    volumes:
+      - /volume1/docker/family-calendar-briefing/token.json:/app/token.json
+      - /volume1/docker/family-calendar-briefing/html:/app/html
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - /volume1/docker/family-calendar-briefing/html:/usr/share/nginx/html:ro
+    ports:
+      - "8090:80"
+    restart: unless-stopped

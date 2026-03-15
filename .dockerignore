@@ -1,0 +1,11 @@
+.env
+token.json
+credentials.json
+html/
+__pycache__/
+*.pyc
+.git/
+.claude/
+README.md
+generate_token.py
+run_now.sh
