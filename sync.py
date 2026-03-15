@@ -1,4 +1,4 @@
-"""Fetch Google Calendar events and generate an AI-powered family briefing."""
+"""Fetch Google Calendar events and generate a structured JSON briefing."""
 
 import json
 import os
@@ -13,7 +13,7 @@ from googleapiclient.discovery import build
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 TOKEN_PATH = Path(os.environ.get("TOKEN_PATH", SCRIPT_DIR / "token.json"))
-HTML_DIR = Path(os.environ.get("HTML_DIR", SCRIPT_DIR / "html"))
+HISTORY_DIR = Path(os.environ.get("HISTORY_DIR", SCRIPT_DIR / "history"))
 LOOK_AHEAD_DAYS = 14
 
 
@@ -102,67 +102,184 @@ def format_events_as_text(events):
     return "\n".join(lines)
 
 
-def generate_briefing(events_text):
-    """Send events to Claude Haiku and get back a styled HTML briefing."""
+def analyze_weekends(events):
+    """Analyze upcoming weekends and flag light ones for date night/family suggestions."""
+    now = datetime.now()
+    weekends = []
+
+    # Find all Sat/Sun pairs in the look-ahead window
+    for day_offset in range(LOOK_AHEAD_DAYS):
+        day = now + timedelta(days=day_offset)
+        if day.weekday() == 5:  # Saturday
+            saturday = day.date()
+            sunday = saturday + timedelta(days=1)
+
+            sat_events = []
+            sun_events = []
+            for ev in events:
+                ev_date = ev["start"][:10]
+                is_timed = "T" in ev["start"]
+                if ev_date == str(saturday):
+                    sat_events.append(ev)
+                    if is_timed:
+                        sat_events[-1]["_timed"] = True
+                elif ev_date == str(sunday):
+                    sun_events.append(ev)
+                    if is_timed:
+                        sun_events[-1]["_timed"] = True
+
+            timed_count = sum(1 for e in sat_events if e.get("_timed")) + sum(
+                1 for e in sun_events if e.get("_timed")
+            )
+
+            if timed_count == 0:
+                status = "free"
+            elif timed_count <= 1:
+                status = "light"
+            else:
+                status = "busy"
+
+            weekends.append(
+                {
+                    "saturday": str(saturday),
+                    "sunday": str(sunday),
+                    "status": status,
+                    "timed_event_count": timed_count,
+                    "saturday_events": [
+                        {"summary": e["summary"], "calendar": e["calendar"]}
+                        for e in sat_events
+                    ],
+                    "sunday_events": [
+                        {"summary": e["summary"], "calendar": e["calendar"]}
+                        for e in sun_events
+                    ],
+                }
+            )
+
+    # Clean up temporary _timed keys
+    for ev in events:
+        ev.pop("_timed", None)
+
+    return weekends
+
+
+def generate_briefing(events_text, weekend_analysis):
+    """Send events to Claude and get back a structured JSON briefing."""
     today = datetime.now().strftime("%A, %B %d, %Y")
+
+    weekend_context = json.dumps(weekend_analysis, indent=2)
 
     client = anthropic.Anthropic()
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=4096,
+        system=(
+            "You are a briefing assistant for a husband who would otherwise forget "
+            "everything on the family calendar. Your tone is warm, funny, and "
+            "self-deprecating 'dumb husband' humor -- think dad jokes and gentle "
+            "roasting, never mean-spirited. The audience is the husband; the vast "
+            "majority of events are his wife's. Your job is to make sure he doesn't "
+            "drop the ball.\n\n"
+            "You MUST respond with valid JSON only. No markdown, no code fences, "
+            "no extra text outside the JSON object."
+        ),
         messages=[
             {
                 "role": "user",
-                "content": f"""You are a helpful family calendar assistant. Today is {today}.
+                "content": f"""Today is {today}.
 
 Here are the upcoming events from our family's Google Calendars:
 
 {events_text}
 
-Please create a friendly, well-organized family briefing as a complete, self-contained HTML document with inline CSS. Requirements:
+Here is the weekend analysis data:
 
-- Mobile-friendly responsive design
-- Clean, modern styling with good typography
-- Color-code events by calendar name (assign each calendar a distinct, pleasant color)
-- Group events by date with clear date headers
-- Highlight today and tomorrow prominently
-- Flag any scheduling conflicts or overlapping events
-- Note coordination needs (e.g., multiple family members at different places at the same time)
-- Call out prep items (e.g., things to pack, early wake-ups)
-- Include a brief friendly summary at the top
-- Show when this briefing was generated at the bottom
-- Do NOT wrap the output in code fences — output only the raw HTML""",
+{weekend_context}
+
+Analyze these events and return a JSON object with exactly these keys:
+
+{{
+  "summary": "A 2-3 sentence 'hey dummy, here's what you need to know' overview of the period. Warm, funny, helpful.",
+  "action_items": [
+    {{
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM" or "All day",
+      "event": "Event name",
+      "calendar": "Calendar name",
+      "why": "Brief explanation of why this affects the husband (e.g. 'you're on kid duty', 'don't forget to RSVP')"
+    }}
+  ],
+  "fyi_events": [
+    {{
+      "date": "YYYY-MM-DD",
+      "events": [
+        {{
+          "time": "HH:MM" or "All day",
+          "event": "Event name",
+          "calendar": "Calendar name",
+          "location": "Location if any"
+        }}
+      ]
+    }}
+  ],
+  "weekend_outlook": [
+    {{
+      "dates": "Mar 15-16",
+      "status": "free" or "light" or "busy",
+      "suggestion": "For free/light weekends: a specific date night idea, family activity, or lazy weekend celebration. For busy weekends: a brief heads-up about what's going on."
+    }}
+  ],
+  "conflicts": [
+    {{
+      "events": ["Event A", "Event B"],
+      "date": "YYYY-MM-DD",
+      "description": "Brief description of the conflict"
+    }}
+  ]
+}}
+
+Rules:
+- action_items: things the husband must DO, show up for, drive someone to, handle childcare around, buy gifts for, RSVP to. When wife is busy, call out that he's on duty.
+- fyi_events: everything else, grouped by date. These are visibility items.
+- weekend_outlook: one entry per weekend in the window. Use the weekend analysis data provided.
+- conflicts: any overlapping or double-booked events. Empty array if none.
+- Return ONLY the JSON object, nothing else.""",
             }
         ],
     )
 
-    return message.content[0].text
+    raw = message.content[0].text.strip()
+    # Strip code fences if the model wraps them despite instructions
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+
+    return json.loads(raw)
 
 
-def write_error_page(error_msg):
-    """Write an error HTML page so the dashboard shows the problem, not stale content."""
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calendar Briefing - Error</title>
-<style>
-body {{ font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; color: #333; }}
-.error {{ background: #fee; border: 1px solid #c00; border-radius: 8px; padding: 20px; margin-top: 20px; }}
-</style>
-</head>
-<body>
-<h1>Calendar Briefing Error</h1>
-<div class="error">
-<p>The briefing could not be generated:</p>
-<pre>{error_msg}</pre>
-</div>
-<p>Generated at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-</body>
-</html>"""
-    HTML_DIR.mkdir(parents=True, exist_ok=True)
-    (HTML_DIR / "index.html").write_text(html)
+def rebuild_index(history_dir):
+    """Rebuild index.json from all snapshot files in the history directory."""
+    snapshots = []
+    for path in sorted(history_dir.glob("*.json"), reverse=True):
+        if path.name == "index.json":
+            continue
+        try:
+            data = json.loads(path.read_text())
+            snapshots.append(
+                {
+                    "timestamp": path.stem,
+                    "generated_at": data.get("generated_at", ""),
+                    "event_count": data.get("event_count", 0),
+                }
+            )
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    index_path = history_dir / "index.json"
+    index_path.write_text(json.dumps(snapshots, indent=2))
+    print(f"Index updated: {len(snapshots)} snapshots")
 
 
 def main():
@@ -174,19 +291,36 @@ def main():
         events = fetch_events(creds)
         print(f"Found {len(events)} events in the next {LOOK_AHEAD_DAYS} days")
 
+        print("Analyzing weekends...")
+        weekend_analysis = analyze_weekends(events)
+
         events_text = format_events_as_text(events)
 
         print("Generating briefing with Claude...")
-        html = generate_briefing(events_text)
+        briefing = generate_briefing(events_text, weekend_analysis)
 
-        HTML_DIR.mkdir(parents=True, exist_ok=True)
-        (HTML_DIR / "index.html").write_text(html)
-        print("Briefing written to html/index.html")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+
+        snapshot = {
+            "generated_at": datetime.now().isoformat(),
+            "look_ahead_days": LOOK_AHEAD_DAYS,
+            "event_count": len(events),
+            "events": events,
+            "briefing": briefing,
+            "weekend_analysis": weekend_analysis,
+        }
+        snapshot_path = HISTORY_DIR / f"{timestamp}.json"
+        snapshot_path.write_text(json.dumps(snapshot, indent=2))
+        print(f"Snapshot saved to {snapshot_path}")
+
+        rebuild_index(HISTORY_DIR)
+
+        print("Done!")
 
     except Exception:
         error = traceback.format_exc()
         print(f"ERROR: {error}")
-        write_error_page(error)
 
 
 if __name__ == "__main__":

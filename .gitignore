@@ -7,7 +7,7 @@ credentials.json
 docker-compose.override.yml
 
 # Generated output
-html/
+history/
 
 # Python
 .venv/

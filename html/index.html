@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Dumb Husband Briefing</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f5f4;
+    color: #1a1a1a;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: #1e3a5f;
+    color: #fff;
+    padding: 1.5rem 1rem;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .header .subtitle {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    margin-top: 0.25rem;
+  }
+
+  .nav {
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .nav button {
+    background: #475569;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .nav button:hover { background: #1e3a5f; }
+  .nav button:disabled { background: #cbd5e1; cursor: default; }
+  .nav .date-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1e3a5f;
+    min-width: 10rem;
+    text-align: center;
+  }
+  .nav select {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+    background: #fff;
+    color: #1a1a1a;
+    cursor: pointer;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .section.full-width { grid-column: 1 / -1; }
+
+  .loading, .empty {
+    text-align: center;
+    padding: 4rem 1rem;
+    color: #64748b;
+    grid-column: 1 / -1;
+  }
+  .loading .spinner {
+    display: inline-block;
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid #e2e8f0;
+    border-top-color: #1e3a5f;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    min-width: 0;
+  }
+  .section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .summary-text {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: #334155;
+  }
+
+  .action-item {
+    border-left: 3px solid #d97706;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.5rem;
+    background: #fffbeb;
+    border-radius: 0 6px 6px 0;
+  }
+  .action-item:last-child { margin-bottom: 0; }
+  .action-item .event-name {
+    font-weight: 600;
+    color: #92400e;
+  }
+  .action-item .event-meta {
+    font-size: 0.8rem;
+    color: #78716c;
+    margin-top: 0.15rem;
+  }
+  .action-item .event-why {
+    font-size: 0.85rem;
+    color: #b45309;
+    margin-top: 0.25rem;
+    font-style: italic;
+  }
+
+  .date-group { margin-bottom: 0.75rem; }
+  .date-group:last-child { margin-bottom: 0; }
+  .date-header {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #475569;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .fyi-event {
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .fyi-time {
+    color: #64748b;
+    font-size: 0.8rem;
+    min-width: 5rem;
+    flex-shrink: 0;
+  }
+  .fyi-name { color: #1a1a1a; }
+  .fyi-location {
+    font-size: 0.8rem;
+    color: #94a3b8;
+  }
+
+  .cal-pill {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .weekend-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.5rem;
+  }
+  .weekend-card {
+    border-radius: 8px;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+  }
+  .weekend-card.free { border-color: #86efac; background: #f0fdf4; }
+  .weekend-card.light { border-color: #fde68a; background: #fefce8; }
+  .weekend-card.busy { border-color: #e2e8f0; background: #f8fafc; }
+  .weekend-dates {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1e3a5f;
+  }
+  .weekend-status {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 0.5rem;
+  }
+  .weekend-status.free { background: #dcfce7; color: #166534; }
+  .weekend-status.light { background: #fef9c3; color: #854d0e; }
+  .weekend-status.busy { background: #f1f5f9; color: #475569; }
+  .weekend-suggestion {
+    font-size: 0.9rem;
+    color: #334155;
+    margin-top: 0.35rem;
+  }
+
+  .conflict {
+    border-left: 3px solid #dc2626;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    background: #fef2f2;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+  }
+  .conflict:last-child { margin-bottom: 0; }
+
+  .footer {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+  }
+
+  @media (max-width: 768px) {
+    .container { grid-template-columns: 1fr; }
+    .header h1 { font-size: 1.25rem; }
+    .container { padding: 0.75rem; }
+    .section { padding: 1rem; }
+    .fyi-event { flex-direction: column; gap: 0.1rem; }
+    .fyi-time { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>The Dumb Husband Briefing</h1>
+  <div class="subtitle">Don't drop the ball.</div>
+</div>
+
+<div class="nav">
+  <button id="btn-prev" title="Previous briefing">&larr; Prev</button>
+  <span class="date-label" id="nav-date">Loading...</span>
+  <button id="btn-next" title="Next briefing">Next &rarr;</button>
+  <select id="briefing-select" title="All briefings">
+    <option value="">All Briefings</option>
+  </select>
+</div>
+
+<div class="container" id="content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Loading briefing...</div>
+  </div>
+</div>
+
+<div class="footer" id="footer"></div>
+
+<script>
+(function() {
+  const HISTORY_BASE = 'history';
+  let index = [];
+  let currentIdx = -1;
+
+  const CAL_COLORS = [
+    { bg: '#f0f4f0', fg: '#3d5a3d' },
+    { bg: '#eef2f7', fg: '#3d4f6b' },
+    { bg: '#f5f0eb', fg: '#6b5a45' },
+    { bg: '#f0eef5', fg: '#5a4f6b' },
+    { bg: '#ebf5f5', fg: '#3d6060' },
+    { bg: '#f5f0f0', fg: '#6b4545' },
+    { bg: '#f2f0eb', fg: '#5a5540' },
+    { bg: '#eef0f5', fg: '#454f6b' },
+  ];
+  const calColorMap = {};
+  let colorIdx = 0;
+
+  function getCalColor(name) {
+    if (!calColorMap[name]) {
+      calColorMap[name] = CAL_COLORS[colorIdx % CAL_COLORS.length];
+      colorIdx++;
+    }
+    return calColorMap[name];
+  }
+
+  function calPill(name) {
+    const c = getCalColor(name);
+    return '<span class="cal-pill" style="background:' + c.bg + ';color:' + c.fg + '">' + esc(name) + '</span>';
+  }
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function formatGenerated(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+  }
+
+  async function loadIndex() {
+    try {
+      const resp = await fetch(HISTORY_BASE + '/index.json');
+      if (!resp.ok) throw new Error('No index');
+      index = await resp.json();
+    } catch (e) {
+      index = [];
+    }
+
+    const sel = document.getElementById('briefing-select');
+    sel.innerHTML = '<option value="">All Briefings</option>';
+    index.forEach(function(entry, i) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = formatGenerated(entry.generated_at) || entry.timestamp;
+      sel.appendChild(opt);
+    });
+
+    if (index.length === 0) {
+      showEmpty();
+      return;
+    }
+
+    const hash = location.hash.slice(1);
+    if (hash) {
+      const found = index.findIndex(function(e) { return e.timestamp === hash; });
+      if (found >= 0) {
+        loadBriefing(found);
+        return;
+      }
+    }
+    loadBriefing(0);
+  }
+
+  async function loadBriefing(idx) {
+    if (idx < 0 || idx >= index.length) return;
+    currentIdx = idx;
+    location.hash = index[idx].timestamp;
+
+    document.getElementById('btn-prev').disabled = (idx >= index.length - 1);
+    document.getElementById('btn-next').disabled = (idx <= 0);
+    document.getElementById('briefing-select').value = idx;
+    document.getElementById('nav-date').textContent = formatGenerated(index[idx].generated_at) || index[idx].timestamp;
+
+    var content = document.getElementById('content');
+    content.innerHTML = '<div class="loading"><div class="spinner"></div><div>Loading briefing...</div></div>';
+
+    try {
+      var resp = await fetch(HISTORY_BASE + '/' + index[idx].timestamp + '.json');
+      if (!resp.ok) throw new Error('Failed to load');
+      var data = await resp.json();
+      render(data);
+    } catch (e) {
+      content.innerHTML = '<div class="empty"><p>Could not load this briefing.</p><p style="font-size:0.8rem;color:#94a3b8">' + esc(e.message) + '</p></div>';
+    }
+  }
+
+  function showEmpty() {
+    document.getElementById('nav-date').textContent = 'No briefings yet';
+    document.getElementById('btn-prev').disabled = true;
+    document.getElementById('btn-next').disabled = true;
+    document.getElementById('content').innerHTML = '<div class="empty"><p>No briefings have been generated yet.</p><p style="margin-top:0.5rem">Run <code>sync.py</code> to create your first briefing.</p></div>';
+  }
+
+  function render(data) {
+    var b = data.briefing || {};
+    var content = document.getElementById('content');
+    var html = '';
+
+    // Summary
+    if (b.summary) {
+      html += '<div class="section full-width">' +
+        '<div class="section-title">Hey Dummy</div>' +
+        '<div class="summary-text">' + esc(b.summary) + '</div>' +
+        '</div>';
+    }
+
+    // Action items
+    if (b.action_items && b.action_items.length > 0) {
+      html += '<div class="section">' +
+        '<div class="section-title">&#x1F6A8; You Need to Act</div>';
+      for (var i = 0; i < b.action_items.length; i++) {
+        var item = b.action_items[i];
+        html += '<div class="action-item">' +
+          '<div class="event-name">' + esc(item.event) + '</div>' +
+          '<div class="event-meta">' + formatDate(item.date) + ' &middot; ' + esc(item.time) + ' ' + calPill(item.calendar) + '</div>' +
+          (item.why ? '<div class="event-why">' + esc(item.why) + '</div>' : '') +
+          '</div>';
+      }
+      html += '</div>';
+    }
+
+    // FYI events
+    if (b.fyi_events && b.fyi_events.length > 0) {
+      html += '<div class="section">' +
+        '<div class="section-title">&#x1F4CB; FYI &mdash; Wife\'s World</div>';
+      for (var g = 0; g < b.fyi_events.length; g++) {
+        var group = b.fyi_events[g];
+        html += '<div class="date-group">' +
+          '<div class="date-header">' + formatDate(group.date) + '</div>';
+        var events = group.events || [];
+        for (var j = 0; j < events.length; j++) {
+          var ev = events[j];
+          html += '<div class="fyi-event">' +
+            '<span class="fyi-time">' + esc(ev.time) + '</span>' +
+            '<span class="fyi-name">' + esc(ev.event) + '</span>' +
+            calPill(ev.calendar) +
+            (ev.location ? '<span class="fyi-location">@ ' + esc(ev.location) + '</span>' : '') +
+            '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Weekend outlook
+    if (b.weekend_outlook && b.weekend_outlook.length > 0) {
+      html += '<div class="section full-width">' +
+        '<div class="section-title">&#x1F3D6;&#xFE0F; Weekend Outlook</div>' +
+        '<div class="weekend-cards">';
+      for (var w = 0; w < b.weekend_outlook.length; w++) {
+        var wk = b.weekend_outlook[w];
+        var st = wk.status || 'busy';
+        html += '<div class="weekend-card ' + st + '">' +
+          '<span class="weekend-dates">' + esc(wk.dates) + '</span>' +
+          '<span class="weekend-status ' + st + '">' + st + '</span>' +
+          (wk.suggestion ? '<div class="weekend-suggestion">' + esc(wk.suggestion) + '</div>' : '') +
+          '</div>';
+      }
+      html += '</div></div>';
+    }
+
+    // Conflicts
+    if (b.conflicts && b.conflicts.length > 0) {
+      html += '<div class="section full-width">' +
+        '<div class="section-title">&#x26A0;&#xFE0F; Conflicts</div>';
+      for (var c = 0; c < b.conflicts.length; c++) {
+        var conf = b.conflicts[c];
+        html += '<div class="conflict">' +
+          '<strong>' + formatDate(conf.date) + '</strong>: ' + esc(conf.description) +
+          '</div>';
+      }
+      html += '</div>';
+    }
+
+    content.innerHTML = html || '<div class="empty">This briefing has no content.</div>';
+    document.getElementById('footer').textContent = data.generated_at ? 'Generated ' + formatGenerated(data.generated_at) : '';
+  }
+
+  // Navigation
+  document.getElementById('btn-prev').addEventListener('click', function() { loadBriefing(currentIdx + 1); });
+  document.getElementById('btn-next').addEventListener('click', function() { loadBriefing(currentIdx - 1); });
+  document.getElementById('briefing-select').addEventListener('change', function() {
+    if (this.value !== '') loadBriefing(parseInt(this.value));
+  });
+  window.addEventListener('hashchange', function() {
+    var hash = location.hash.slice(1);
+    if (hash) {
+      var found = index.findIndex(function(e) { return e.timestamp === hash; });
+      if (found >= 0 && found !== currentIdx) loadBriefing(found);
+    }
+  });
+
+  loadIndex();
+})();
+</script>
+</body>
+</html>
