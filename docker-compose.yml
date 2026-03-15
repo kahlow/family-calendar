@@ -1,20 +1,20 @@
 services:
   calendar-sync:
-    build: .
+    image: family-calendar-sync
     env_file: .env
     environment:
       - TOKEN_PATH=/app/token.json
       - HISTORY_DIR=/app/history
     volumes:
-      - /volume1/docker/family-calendar-briefing/token.json:/app/token.json
-      - /volume1/docker/family-calendar-briefing/history:/app/history
+      - /Volume1/docker/family-calendar-briefing/token.json:/app/token.json
+      - /Volume1/docker/family-calendar-briefing/history:/app/history
     restart: unless-stopped
 
   nginx:
     image: nginx:alpine
     volumes:
-      - /volume1/docker/family-calendar-briefing/html:/usr/share/nginx/html:ro
-      - /volume1/docker/family-calendar-briefing/history:/usr/share/nginx/html/history:ro
+      - /Volume1/docker/family-calendar-briefing/html:/usr/share/nginx/html:ro
+      - /Volume1/docker/family-calendar-briefing/history:/usr/share/nginx/html/history:ro
     ports:
       - "8090:80"
     restart: unless-stopped

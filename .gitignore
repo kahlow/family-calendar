@@ -8,6 +8,7 @@ docker-compose.override.yml
 
 # Generated output
 history/
+html/history
 
 # Python
 .venv/
